@@ -1,0 +1,30 @@
+{
+  "thresholds": { "yellowMaxMin": 30, "redRunChecks": 3, "redFailPct": 5, "grayMinSlotPct": 50, "slotMin": 10 },
+  "apps": [
+    { "id": "webapp-v2", "name": "Szeretetben CC Webapp", "items": [
+      { "id": "webapp-v2", "name": "Webapp (ai.szeretetben.hu)", "kind": "http", "url": "https://ai.szeretetben.hu/api/health", "cadence": "10m" } ] },
+    { "id": "szeretetben-app", "name": "Szeretetben App", "items": [
+      { "id": "szeretetben-app", "name": "Szeretetben App", "kind": "http", "url": "https://app.szeretetben.hu/api/health", "cadence": "10m" } ] },
+    { "id": "fort-palyazatfigyelo", "name": "Fort Pályázatfigyelő", "items": [
+      { "id": "fort-palyazatfigyelo", "name": "Pályázatfigyelő", "kind": "http", "url": "https://fort-palyazatfigyelo.vercel.app/api/health", "cadence": "10m" } ] },
+    { "id": "fort-adatlap", "name": "Fort Adatlap", "items": [
+      { "id": "fort-adatlap", "name": "Adatlap", "kind": "http", "url": "https://fort-adatlap.vercel.app/fort/", "cadence": "10m" } ] },
+    { "id": "supremex-parking", "name": "Supremex Parking", "items": [
+      { "id": "supremex-parking", "name": "Parking", "kind": "http", "url": "https://supremex-parking.vercel.app/api/health", "cadence": "10m" } ] },
+    { "id": "vedikus-asztro", "name": "Védikus Asztro", "items": [
+      { "id": "vedikus-asztro", "name": "Védikus Asztro", "kind": "http", "url": "https://szeretetben-vedikus-asztro.vercel.app/api/health", "cadence": "10m" },
+      { "id": "bepontosito", "name": "Bepontosító", "kind": "http", "url": "https://szeretetben-vedikus-asztro.vercel.app/bepontosito.html", "cadence": "10m" } ] },
+    { "id": "otthon", "name": "Otthon (Air, Shelly)", "items": [
+      { "id": "air", "name": "Air", "kind": "hc", "slug": "air", "cadence": "10m" },
+      { "id": "shelly-garazs", "name": "Shelly garázs", "kind": "hc", "slug": "shelly-garazs", "cadence": "10m" },
+      { "id": "shelly-kapu", "name": "Shelly kapu", "kind": "hc", "slug": "shelly-kapu", "cadence": "10m" } ] },
+    { "id": "szolgaltatasok", "name": "Háttérszolgáltatások", "items": [
+      { "id": "sb-cc", "name": "Supabase (CC Webapp)", "kind": "http", "urlEnv": "SB_URL_CC", "urlSuffix": "/rest/v1/", "expect": [200, 401], "cadence": "10m" },
+      { "id": "sb-supremex", "name": "Supabase (Supremex)", "kind": "http", "urlEnv": "SB_URL_SUPREMEX", "urlSuffix": "/rest/v1/", "expect": [200, 401], "cadence": "10m" },
+      { "id": "sb-vedikus", "name": "Supabase (Védikus)", "kind": "http", "urlEnv": "SB_URL_VEDIKUS", "urlSuffix": "/rest/v1/", "expect": [200, 401], "cadence": "10m" },
+      { "id": "r2", "name": "Cloudflare R2", "kind": "r2", "cadence": "10m" },
+      { "id": "github", "name": "GitHub", "kind": "statuspage", "url": "https://www.githubstatus.com/api/v2/status.json", "cadence": "10m" },
+      { "id": "vercel", "name": "Vercel", "kind": "statuspage", "url": "https://www.vercel-status.com/api/v2/status.json", "cadence": "10m" },
+      { "id": "cloudflare", "name": "Cloudflare", "kind": "statuspage", "url": "https://www.cloudflarestatus.com/api/v2/status.json", "cadence": "10m" } ] }
+  ]
+}

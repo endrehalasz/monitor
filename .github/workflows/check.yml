@@ -1,0 +1,39 @@
+name: check
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Ellenőrzés
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          HC_API_KEY: ${{ secrets.HC_API_KEY }}
+          HC_PING_URL: ${{ secrets.HC_PING_MONITOR_CHECKER }}
+          SB_URL_CC: ${{ secrets.SB_URL_CC }}
+          SB_URL_SUPREMEX: ${{ secrets.SB_URL_SUPREMEX }}
+          SB_URL_VEDIKUS: ${{ secrets.SB_URL_VEDIKUS }}
+          RUN_ID: ${{ github.run_id }}
+        run: node check.mjs
+      # A GitHub 60 nap inaktivitás után kikapcsolja az ütemezést: ha az utolsó commit >30 napos, üres commit.
+      - name: Keep-alive
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt 2592000 ]; then
+            git config user.name "monitor-bot"; git config user.email "monitor-bot@users.noreply.github.com"
+            git commit --allow-empty -m "keep-alive" && git push
+          fi
