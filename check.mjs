@@ -3,6 +3,7 @@
 // Titkok csak env-ből; a log csak elemnevet és állapotkódot ír, URL-t/hibaszöveget nem.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import tls from 'node:tls'
 
 const TZ = 'Europe/Budapest'
 const DRY = process.env.DRY === '1'                 // helyi próba: nincs R2-írás, nincs ping
@@ -18,7 +19,7 @@ const hmac = (k, d) => crypto.createHmac('sha256', k).update(d).digest()
 const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
 const { R2_ACCOUNT_ID: ACCT, R2_ACCESS_KEY_ID: KEY, R2_SECRET_ACCESS_KEY: SECRET } = process.env
 
-async function r2(method, bucket, objKey, body) {
+async function r2(method, bucket, objKey, body, contentType = 'application/json') {
   const host = `${ACCT}.r2.cloudflarestorage.com`
   const path = '/' + bucket + '/' + objKey.split('/').map(enc).join('/')
   const payload = body == null ? '' : body
@@ -26,7 +27,7 @@ async function r2(method, bucket, objKey, body) {
   const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
   const date = amzDate.slice(0, 8)
   const h = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate }
-  if (body != null) h['content-type'] = 'application/json'
+  if (body != null) h['content-type'] = contentType
   const names = Object.keys(h).sort()
   const canonical = [method, path, '', names.map((n) => `${n}:${h[n]}\n`).join(''), names.join(';'), payloadHash].join('\n')
   const scope = `${date}/auto/s3/aws4_request`
@@ -45,13 +46,14 @@ async function r2Json(bucket, key) {
   if (!r.ok) throw new Error(`R2 GET ${key}: ${r.status}`)
   return JSON.parse(await r.text())
 }
-async function r2Put(bucket, key, obj) {
+async function r2Put(bucket, key, obj, contentType) {
   if (DRY) return
-  const r = await r2('PUT', bucket, key, JSON.stringify(obj))
+  const r = await r2('PUT', bucket, key, typeof obj === 'string' ? obj : JSON.stringify(obj), contentType)
   if (!r.ok) throw new Error(`R2 PUT ${key}: ${r.status}`)
 }
 
 // ─── mérések ────────────────────────────────────────────────────────────────────
+let airHb = null      // Air heartbeat (egyszer olvassuk)
 let hcChecks = null   // slug → check (egyszer töltjük le)
 async function loadHc() {
   if (hcChecks) return hcChecks
@@ -61,12 +63,24 @@ async function loadHc() {
   return hcChecks
 }
 
+function certDaysLeft(host) {
+  return new Promise((resolve) => {
+    const s = tls.connect({ host, port: 443, servername: host }, () => { const c = s.getPeerCertificate(); s.destroy(); resolve(c && c.valid_to ? Math.floor((new Date(c.valid_to) - Date.now()) / 864e5) : null) })
+    s.on('error', () => resolve(null)); s.setTimeout(15000, () => { s.destroy(); resolve(null) })
+  })
+}
+
 async function probeOnce(it) {
   const t0 = Date.now()
   if (it.kind === 'http') {
     const base = it.urlEnv ? process.env[it.urlEnv] : it.url
     if (!base) return { ok: false, code: 0, ms: 0 }
-    const r = await fetch(base + (it.urlSuffix || ''), { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'monitor-checker' } })
+    const headers = { 'user-agent': 'monitor-checker' }
+    for (const [h, [prefix, envName]] of Object.entries(it.headersEnv || {})) {   // kulcs-érvényesség: a kulcs env-ből, sosem a repóból/logból
+      if (!process.env[envName]) return { nodata: true, ok: false, code: 0, ms: 0 }   // nincs bekötött titok = nincs adat (nem kiesés)
+      headers[h] = prefix + process.env[envName]
+    }
+    const r = await fetch(base + (it.urlSuffix || ''), { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { ...headers, ...(it.headers || {}) } })
     return { ok: (it.expect || [200]).includes(r.status), code: r.status, ms: Date.now() - t0 }
   }
   if (it.kind === 'statuspage') {
@@ -78,6 +92,26 @@ async function probeOnce(it) {
     const c = (await loadHc())[it.slug]
     if (c && (c.status === 'new' || c.status === 'paused')) return { nodata: true, ok: false, code: 0, ms: 0 }   // még nem pingelt / szüneteltetett → nincs adat, nem kiesés
     return { ok: !!c && (c.status === 'up' || c.status === 'grace'), code: c ? ({ up: 200, grace: 200, down: 503, new: 404, paused: 410 }[c.status] || 0) : 404, ms: Date.now() - t0 }
+  }
+  if (it.kind === 'airsvc') {   // az Air heartbeat-JSON-ja (R2: air/heartbeat.json); régi/hiányzó heartbeat = nincs adat (az `air` elem jelzi a kiesést)
+    airHb ??= await r2Json('monitor', 'air/heartbeat.json').catch(() => null)
+    if (!airHb || now - airHb.ts > 25 * 6e4) return { nodata: true, ok: false, code: 0, ms: 0 }
+    const sv = airHb.services?.[it.service]
+    return { ok: !!sv?.running, code: sv?.running ? 200 : 503, ms: Date.now() - t0 }
+  }
+  if (it.kind === 'tls') {   // tanúsítvány-lejárat: a leghamarabb lejáró hosszához mért napok; minDays alatt hiba
+    let min = Infinity
+    for (const host of it.hosts) {
+      const left = await certDaysLeft(host)
+      if (left == null) return { ok: false, code: 0, ms: Date.now() - t0 }
+      min = Math.min(min, left)
+    }
+    return { ok: min >= it.minDays, code: min >= it.minDays ? 200 : 410, ms: Date.now() - t0 }
+  }
+  if (it.kind === 'cron') {   // a cron-job.org tick időbélyege (a webapp-v2 írja: cron/last-tick.json); hiányzó = nincs adat
+    const t = await r2Json('monitor', 'cron/last-tick.json').catch(() => null)
+    if (!t) return { nodata: true, ok: false, code: 0, ms: 0 }
+    return { ok: (now - t.ts) / 6e4 <= it.maxAgeMin, code: 200, ms: Date.now() - t0 }
   }
   if (it.kind === 'r2') {
     const r = await r2('GET', 'monitor', 'monitor.json')
@@ -97,6 +131,7 @@ async function probe(it) {
 }
 
 const dueNow = (it, now) => {
+  if (process.env.FORCE === '1') return true   // helyi próba: minden elem esedékes
   const d = new Date(now)
   if (it.cadence === 'hourly') return d.getUTCMinutes() < 10
   if (it.cadence === 'daily') return d.getUTCHours() === 2 && d.getUTCMinutes() < 10
@@ -148,12 +183,40 @@ for (const k of Object.keys(raw)) if (!flat.some((f) => f.it.id === k)) delete r
 
 const monitor = { updatedAt: now, runId: process.env.RUN_ID || 'local', apps, raw }
 
-// nyilvános, szűrt másolat: csak név + állapot + időpont (nincs URL, kód, hibaüzenet)
-const pub = { updatedAt: now, apps: apps.map((a) => ({ id: a.id, name: a.name, items: a.items.map((i) => ({ name: i.name, state: i.state, checkedAt: i.checkedAt })) })) }
+// napi szín (a webapp-v2 lib/monitorOverview.js-ével azonos szabály): g zöld · y sárga · r piros · x szürke · n nem figyelt
+const SLOT = { '10m': 10, hourly: 60, daily: 1440 }
+const T = cfg.thresholds
+function dayColor(rec, cadence, isToday, isFirst) {
+  const slot = SLOT[cadence] || 10
+  let expected = Math.floor(1440 / slot)
+  if (isToday) { const [hh, mm] = new Date(now).toLocaleTimeString('sv-SE', { timeZone: TZ, hour12: false }).split(':').map(Number); expected = Math.max(1, Math.floor((hh * 60 + mm) / slot)) }
+  if (!rec || (!isFirst && rec.n < expected * T.grayMinSlotPct / 100)) return 'x'
+  if (rec.fail === 0) return 'g'
+  if (rec.maxRunMin >= T.redRunChecks * T.slotMin || rec.fail / rec.n * 100 >= T.redFailPct) return 'r'
+  return 'y'
+}
+const prevMonthKey = localDay(now - 31 * 864e5).slice(0, 7)
+const dailyPrev = prevMonthKey === month ? {} : (DRY && !ACCT ? null : await r2Json('monitor', `daily/${prevMonthKey}.json`).catch(() => null)) || {}
+const days14 = Array.from({ length: 14 }, (_, i) => localDay(now - i * 864e5))   // legfrissebb elöl
+const worstColor = (cs) => ['r', 'x', 'y', 'g'].find((c) => cs.includes(c)) || 'n'
+const itemDays = (it) => {
+  const recs = { ...(dailyPrev[it.id] || {}), ...(daily[it.id] || {}) }
+  const first = Object.keys(recs).sort()[0]
+  return days14.map((d) => (!first || d < first) ? 'n' : dayColor(recs[d], it.cadence, d === days14[0], d === first))
+}
+// nyilvános, szűrt másolat: csak név + állapot + napi szín (nincs URL, kód, hibaüzenet, kulcs)
+const pub = {
+  updatedAt: now, days: days14,
+  apps: apps.map((a) => {
+    const items = a.items.map((i) => ({ name: i.name, state: i.state, days: itemDays(i) }))
+    return { name: a.name, state: a.items.some((i) => i.state === 'fail') ? 'fail' : a.items.some((i) => i.state === 'nodata' || i.state === 'unknown') ? 'nodata' : 'ok', days: days14.map((_, k) => worstColor(items.map((x) => x.days[k]).filter((c) => c !== 'n'))), items }
+  }),
+}
 
 await r2Put('monitor', 'monitor.json', monitor)
 await r2Put('monitor', `daily/${month}.json`, daily)
-await r2Put('monitor-public', 'monitor-public.json', pub)
+if (process.env.PUBLIC_PREFIX) await r2Put('monitor-public', `${process.env.PUBLIC_PREFIX}/monitor-public.json`, pub)
+await r2Put('monitor', 'last-run.json', { ts: now })   // apró fájl a cron-tick önjavításnak (a nagy monitor.json-t nem kell olvasni)
 
 // ─── összegzés + healthchecks ping ──────────────────────────────────────────────
 const all = apps.flatMap((a) => a.items)

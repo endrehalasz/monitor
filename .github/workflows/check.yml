@@ -27,6 +27,9 @@ jobs:
           SB_URL_CC: ${{ secrets.SB_URL_CC }}
           SB_URL_SUPREMEX: ${{ secrets.SB_URL_SUPREMEX }}
           SB_URL_VEDIKUS: ${{ secrets.SB_URL_VEDIKUS }}
+          MONITOR_ANTHROPIC_KEY: ${{ secrets.MONITOR_ANTHROPIC_KEY }}
+          MONITOR_OPENAI_KEY: ${{ secrets.MONITOR_OPENAI_KEY }}
+          PUBLIC_PREFIX: ${{ secrets.PUBLIC_PREFIX }}
           RUN_ID: ${{ github.run_id }}
         run: node check.mjs
       # A GitHub 60 nap inaktivitás után kikapcsolja az ütemezést: ha az utolsó commit >30 napos, üres commit.

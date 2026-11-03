@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Monitor – tartalék állapotoldal</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --text:#1e2a44; --muted:#6b7690; --border:#e2e6f0; --g:#16a34a; --y:#f59e0b; --r:#dc2626; --x:#94a3b8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1524; --card:#182036; --text:#e6eaf5; --muted:#93a0bd; --border:#2a3552; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:760px; margin:0 auto; }
+  h1 { font-size:20px; margin:4px 0 14px; }
+  .banner { display:flex; gap:10px; align-items:center; padding:12px 14px; border-radius:12px; background:var(--card); border:1px solid var(--border); font-weight:700; margin-bottom:14px; }
+  .dot { width:14px; height:14px; border-radius:50%; flex:none; background:var(--x); }
+  .dot.ok { background:var(--g); } .dot.fail { background:var(--r); } .dot.warn { background:var(--y); }
+  details { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:8px; padding:10px 14px; }
+  summary { display:flex; align-items:center; gap:10px; flex-wrap:wrap; cursor:pointer; list-style:none; }
+  summary::-webkit-details-marker { display:none; }
+  .name { font-weight:700; flex:1 1 180px; min-width:0; }
+  .strip { display:flex; gap:3px; }
+  .cell { width:13px; height:20px; border-radius:3px; background:var(--g); }
+  .cell.y { background:var(--y); } .cell.r { background:var(--r); } .cell.x { background:var(--x); }
+  .cell.n { background:transparent; border:1.5px dashed var(--border); }
+  .item { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:8px 0; border-top:1px solid var(--border); font-size:14px; }
+  .item:first-of-type { margin-top:10px; }
+  .legend { color:var(--muted); font-size:12.5px; margin:12px 0; line-height:1.8; }
+  .legend .cell { display:inline-block; width:11px; height:14px; vertical-align:middle; margin:0 4px 0 10px; }
+  .foot { color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rendszerek elérhetősége</h1>
+  <div id="banner" class="banner"><i class="dot"></i><span>Betöltés…</span></div>
+  <div id="apps"></div>
+  <div class="legend">
+    <span class="cell"></span>nincs kiesés<span class="cell y"></span>rövid kiesés<span class="cell r"></span>hosszabb kiesés<span class="cell x"></span>kevés mérés<span class="cell n"></span>nem figyelt nap
+  </div>
+  <div class="foot">Tartalék oldal: a fő Monitor-oldaltól függetlenül, a monitor adatmásolatából. A legfrissebb nap balra.</div>
+</main>
+<script>
+const LABEL = { ok: 'Elérhető', fail: 'Nem elérhető', nodata: 'Nincs friss adat', unknown: 'Nincs adat' };
+const COLOR = { g: 'nincs kiesés', y: 'rövid kiesés', r: 'hosszabb kiesés', x: 'kevés mérés', n: 'nem figyelt nap' };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const dot = (s) => el('i', 'dot ' + (s === 'ok' ? 'ok' : s === 'fail' ? 'fail' : ''));
+function strip(days, labels) {
+  const s = el('div', 'strip');
+  days.forEach((c, i) => { const x = el('i', 'cell ' + (c === 'g' ? '' : c)); x.title = labels[i] + ': ' + COLOR[c]; s.appendChild(x); });
+  return s;
+}
+function ago(ts) { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? 'most' : m < 90 ? m + ' perce' : Math.round(m / 60) + ' órája'; }
+async function load() {
+  const banner = document.getElementById('banner'), root = document.getElementById('apps');
+  let d;
+  try { const r = await fetch('monitor-public.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw 0; d = await r.json(); }
+  catch { banner.replaceChildren(el('i', 'dot fail'), el('span', null, 'Az adat nem olvasható (a tárhely vagy a monitor nem elérhető).')); return; }
+  const stale = (Date.now() - d.updatedAt) / 60000 > 30;
+  const down = d.apps.filter(a => a.state === 'fail');
+  const st = stale || down.length ? 'fail' : d.apps.some(a => a.state !== 'ok') ? 'warn' : 'ok';
+  const txt = stale ? 'Az adat régi (' + ago(d.updatedAt) + ') – a monitor leállhatott.' : down.length ? down.map(a => a.name).join(', ') + ' nem elérhető' : st === 'warn' ? 'Egyes elemekről még nincs friss adat' : 'Minden rendszer elérhető';
+  banner.replaceChildren(el('i', 'dot ' + st), el('span', null, txt), Object.assign(el('span', 'foot', 'Frissítve: ' + ago(d.updatedAt)), { style: 'margin-left:auto;font-weight:400' }));
+  const labels = d.days.map(x => new Date(x + 'T12:00:00').toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' }));
+  root.replaceChildren(...d.apps.map(a => {
+    const det = el('details'), sum = el('summary');
+    sum.append(dot(a.state), el('span', 'name', a.name), strip(a.days, labels));
+    det.appendChild(sum);
+    a.items.forEach(i => { const row = el('div', 'item'); const l = el('span', null, i.name + ' – ' + (LABEL[i.state] || i.state)); row.append(l, strip(i.days, labels)); det.appendChild(row); });
+    return det;
+  }));
+}
+load(); setInterval(load, 120000);
+</script>
+</body>
+</html>
