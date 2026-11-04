@@ -153,9 +153,9 @@
       "items": [
         {
           "id": "cron-tick",
-          "name": "cron-job.org tick",
+          "name": "cron-job.org tick (óránkénti)",
           "kind": "cron",
-          "maxAgeMin": 35,
+          "maxAgeMin": 75,
           "cadence": "10m"
         },
         {
