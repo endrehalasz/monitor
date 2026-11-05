@@ -43,13 +43,7 @@
           "kind": "http",
           "url": "https://fort-palyazatfigyelo.vercel.app/api/health",
           "cadence": "10m"
-        }
-      ]
-    },
-    {
-      "id": "fort-adatlap",
-      "name": "Fort Adatlap",
-      "items": [
+        },
         {
           "id": "fort-adatlap",
           "name": "Adatlap",
@@ -219,7 +213,11 @@
           "name": "Cloudflare",
           "kind": "statuspage",
           "url": "https://www.cloudflarestatus.com/api/v2/status.json",
-          "okIndicators": ["none", "minor", "major"],
+          "okIndicators": [
+            "none",
+            "minor",
+            "major"
+          ],
           "cadence": "10m"
         }
       ]
