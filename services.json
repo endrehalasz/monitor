@@ -213,12 +213,17 @@
           "name": "Cloudflare",
           "kind": "statuspage",
           "url": "https://www.cloudflarestatus.com/api/v2/status.json",
-          "okIndicators": [
-            "none",
-            "minor",
-            "major"
-          ],
-          "cadence": "10m"
+          "cadence": "10m",
+          "components": [
+            "CDN/Cache",
+            "Authoritative DNS",
+            "API",
+            "Dashboard",
+            "Workers",
+            "R2",
+            "Pages",
+            "Workers KV"
+          ]
         }
       ]
     },

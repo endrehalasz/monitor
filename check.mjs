@@ -84,6 +84,13 @@ async function probeOnce(it) {
     return { ok: (it.expect || [200]).includes(r.status), code: r.status, ms: Date.now() - t0 }
   }
   if (it.kind === 'statuspage') {
+    if (it.components) {   // csak a megnevezett szolgáltatás-komponensek számítanak (a Cloudflare teljes jelzése adatközpontonként is "major" lehet, miközben a szolgáltatások működnek)
+      const r = await fetch(it.url.replace(/status\.json$/, 'components.json'), { signal: AbortSignal.timeout(15000) })
+      const j = r.ok ? await r.json() : null
+      const found = (j?.components || []).filter((c) => it.components.includes(c.name) && !c.group)
+      if (!j || !found.length) return { ok: false, code: r.status, ms: Date.now() - t0 }   // a lista nem olvasható / nincs találat: ez mérési hiba, nem kiesés-jel, a próbák újrapróbálják
+      return { ok: !found.some((c) => ['partial_outage', 'major_outage'].includes(c.status)), code: r.status, ms: Date.now() - t0 }
+    }
     const r = await fetch(it.url, { signal: AbortSignal.timeout(15000) })
     const j = r.ok ? await r.json() : null
     return { ok: !!j && (it.okIndicators || ['none', 'minor']).includes(j.status?.indicator), code: r.status, ms: Date.now() - t0 }
