@@ -5,7 +5,7 @@ concurrency:
   group: monitor
   cancel-in-progress: false
 permissions:
-  contents: write
+  contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -30,11 +30,3 @@ jobs:
           PUBLIC_PREFIX: ${{ secrets.PUBLIC_PREFIX }}
           RUN_ID: ${{ github.run_id }}
         run: node check.mjs
-      # A GitHub 60 nap inaktivitás után kikapcsolja az ütemezést: ha az utolsó commit >30 napos, üres commit.
-      - name: Keep-alive
-        run: |
-          last=$(git log -1 --format=%ct)
-          if [ $(( $(date +%s) - last )) -gt 2592000 ]; then
-            git config user.name "monitor-bot"; git config user.email "monitor-bot@users.noreply.github.com"
-            git commit --allow-empty -m "keep-alive" && git push
-          fi
