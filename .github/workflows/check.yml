@@ -1,7 +1,5 @@
 name: check
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 concurrency:
   group: monitor
