@@ -86,7 +86,7 @@ async function probeOnce(it) {
   if (it.kind === 'statuspage') {
     const r = await fetch(it.url, { signal: AbortSignal.timeout(15000) })
     const j = r.ok ? await r.json() : null
-    return { ok: !!j && ['none', 'minor'].includes(j.status?.indicator), code: r.status, ms: Date.now() - t0 }
+    return { ok: !!j && (it.okIndicators || ['none', 'minor']).includes(j.status?.indicator), code: r.status, ms: Date.now() - t0 }
   }
   if (it.kind === 'hc') {
     const c = (await loadHc())[it.slug]
