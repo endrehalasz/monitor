@@ -106,6 +106,15 @@ async function probeOnce(it) {
     const sv = airHb.services?.[it.service]
     return { ok: !!sv?.running, code: sv?.running ? 200 : 503, ms: Date.now() - t0 }
   }
+  if (it.kind === 'airbattery') {   // az Air akku-figyelő életjele: air/battery.json (percenként írja; battery-watch.py). Ha az Air maga is kiesett (régi heartbeat), nincs adat — az `air` elem jelzi.
+    const b = await r2Json('monitor', 'air/battery.json').catch(() => null)
+    airHb ??= await r2Json('monitor', 'air/heartbeat.json').catch(() => null)
+    const airDown = !airHb || now - airHb.ts > 25 * 6e4
+    if (!b) return { nodata: true, ok: false, code: 0, ms: 0 }
+    const stale = (now - b.ts) / 6e4 > (it.maxAgeMin || 5)
+    if (stale && airDown) return { nodata: true, ok: false, code: 0, ms: 0 }
+    return { ok: !stale, code: stale ? 503 : 200, ms: Date.now() - t0 }
+  }
   if (it.kind === 'tls') {   // tanúsítvány-lejárat: a leghamarabb lejáró hosszához mért napok; minDays alatt hiba
     let min = Infinity
     for (const host of it.hosts) {

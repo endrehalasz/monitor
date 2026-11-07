@@ -138,6 +138,13 @@
           "kind": "airsvc",
           "service": "com.vedikus.ertelmezes",
           "cadence": "10m"
+        },
+        {
+          "id": "air-akku",
+          "name": "Air akku-figyelő",
+          "kind": "airbattery",
+          "maxAgeMin": 5,
+          "cadence": "10m"
         }
       ]
     },
