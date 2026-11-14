@@ -100,6 +100,13 @@ async function probeOnce(it) {
     if (c && (c.status === 'new' || c.status === 'paused')) return { nodata: true, ok: false, code: 0, ms: 0 }   // még nem pingelt / szüneteltetett → nincs adat, nem kiesés
     return { ok: !!c && (c.status === 'up' || c.status === 'grace'), code: c ? ({ up: 200, grace: 200, down: 503, new: 404, paused: 410 }[c.status] || 0) : 404, ms: Date.now() - t0 }
   }
+  if (it.kind === 'hcany') {   // "legalább egy él": több healthchecks-szívverés közül bármelyik friss = rendben (pl. itthoni net: a két Shelly közül legalább az egyik pingel). Mind szünetel/új = nincs adat.
+    const all = await loadHc()
+    const cs = it.slugs.map((sl) => all[sl]).filter(Boolean)
+    if (!cs.length || cs.every((c) => c.status === 'new' || c.status === 'paused')) return { nodata: true, ok: false, code: 0, ms: 0 }
+    const up = cs.filter((c) => c.status === 'up' || c.status === 'grace').length
+    return { ok: up > 0, code: up > 0 ? 200 : 503, ms: Date.now() - t0 }
+  }
   if (it.kind === 'airsvc') {   // az Air heartbeat-JSON-ja (R2: air/heartbeat.json); régi/hiányzó heartbeat = nincs adat (az `air` elem jelzi a kiesést)
     airHb ??= await r2Json('monitor', 'air/heartbeat.json').catch(() => null)
     if (!airHb || now - airHb.ts > 25 * 6e4) return { nodata: true, ok: false, code: 0, ms: 0 }

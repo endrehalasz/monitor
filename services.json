@@ -88,13 +88,23 @@
     },
     {
       "id": "otthon",
-      "name": "Otthon (Air, Shelly)",
+      "name": "Air (munkahely) és itthoni net",
       "items": [
         {
           "id": "air",
-          "name": "Air",
+          "name": "Air (munkahely)",
           "kind": "hc",
           "slug": "air",
+          "cadence": "10m"
+        },
+        {
+          "id": "itthoni-net",
+          "name": "Itthoni internet (Shelly-k)",
+          "kind": "hcany",
+          "slugs": [
+            "shelly-garazs",
+            "shelly-kapu"
+          ],
           "cadence": "10m"
         },
         {
